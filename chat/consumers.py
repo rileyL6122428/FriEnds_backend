@@ -15,37 +15,59 @@ class ChatConsumer(AsyncWebsocketConsumer):
         user = await self.create_user()
         await login(self.scope, user)
 
-        await self.add_user_to_room(
-            room_name=self.room_name,
-            user=user,
-        )
+        # await self.add_user_to_room(
+        #     room_name=self.room_name,
+        #     user=user,
+        # )
 
-        # Join room group
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name,
-        )
+        # # Join room group
+        # await self.channel_layer.group_add(
+        #     self.room_group_name,
+        #     self.channel_name,
+        # )
 
         await self.accept()
+
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "message": "User created!",
+                    "username": self.username,
+                    "type": "user_created",
+                }
+            )
+        )
 
     async def disconnect(self, close_code):
         await self.delete_user()
 
         # Leave room group
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name,
-        )
+        # await self.channel_layer.group_discard(
+        #     self.room_group_name,
+        #     self.channel_name,
+        # )
 
     # Receive message from WebSocket
     async def receive(self, text_data):
-        text_data_json = json.loads(text_data)
-        message = text_data_json["message"]
+        message = json.loads(text_data)["message"]
+        if message["type"] == "room_info":
+            rooms = await self.get_room_info()
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "room_info",
+                        "rooms": rooms,
+                    }
+                )
+            )
+            return
+        # message = text_data_json["message"]
 
         # Send message to room group
-        await self.channel_layer.group_send(
-            self.room_group_name, {"type": "chat_message", "message": message}
-        )
+        # await self.channel_layer.group_send(
+        #     self.room_group_name,
+        #     {"type": "chat_message", "message": message},
+        # )
 
     # Receive message from room group
     async def chat_message(self, event):
@@ -62,6 +84,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         room.occupants.add(user)
         room.save()
         return room
+
+    @database_sync_to_async
+    def get_room_info(self):
+        return [
+            {
+                "name": room.name,
+                "capacity": f"{room.occupants.count()}/2",
+            }
+            for room in Room.objects.all().prefetch_related("occupants")
+        ]
 
     @database_sync_to_async
     def create_user(self):
