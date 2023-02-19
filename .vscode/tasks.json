@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "SEED DB",
+            "command": "poetry", // Could be any other shell command
+            "args": [
+                "run", "python", "manage.py", "seed"
+            ],
+            "type": "shell"
+        }
+    ]
+}
