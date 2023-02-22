@@ -145,7 +145,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return [
             {
                 "name": room.name,
-                "capacity": f"{room.occupants.count()}/2",
+                "capacity": 2,
+                "occupants": [user.username for user in room.occupants.all()],
             }
             for room in Room.objects.all().prefetch_related("occupants")
         ]
@@ -161,5 +162,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def delete_user(self):
         user: User = self.scope["user"]
+        user.room_set.clear()
+        user.save()
         if user:
             user.delete()
