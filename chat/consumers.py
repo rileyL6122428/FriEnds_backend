@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -5,7 +6,7 @@ from channels.db import database_sync_to_async
 from channels.auth import login
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
-from .models import Room
+from .models import Room, Game
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -16,12 +17,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
         user = await self.create_user()
         await login(self.scope, user)
 
-        # await self.add_user_to_room(
-        #     room_name=self.room_name,
-        #     user=user,
-        # )
-
-        # # Join room group
         await self.channel_layer.group_add(
             "ALL_USERS",
             self.channel_name,
@@ -50,7 +45,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # Receive message from WebSocket
     async def receive(self, text_data):
         message = json.loads(text_data)["message"]
-        # if message["type"] == "room_info":
         match message["type"]:
             case "room_info":
                 await self.send(
@@ -64,7 +58,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             case "join_room":
                 room_name = message["room_name"]
-                room = await self.add_user_to_room(
+                room, ready_to_start_game = await self.add_user_to_room(
                     room_name=room_name,
                     user=self.scope["user"],
                 )
@@ -88,6 +82,29 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             },
                         },
                     )
+
+                    if ready_to_start_game:
+                        await self.channel_layer.group_send(
+                            room_name,
+                            {
+                                "type": "chat_message",
+                                "message": {
+                                    "type": "game_starting",
+                                    "message": "game_starting",
+                                },
+                            },
+                        )
+
+                        await self.channel_layer.group_send(
+                            room_name,
+                            {
+                                "type": "chat_message",
+                                "message": {
+                                    "type": "game_started",
+                                    "message": "Game started!",
+                                },
+                            },
+                        )
                 else:
                     await self.send(
                         text_data=json.dumps(
@@ -97,14 +114,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             }
                         )
                     )
-
-        # message = text_data_json["message"]
-
-        # Send message to room group
-        # await self.channel_layer.group_send(
-        #     self.room_group_name,
-        #     {"type": "chat_message", "message": message},
-        # )
 
     async def group_send(self, event):
         await self.send(text_data=json.dumps(event["message"]))
@@ -116,8 +125,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # Send message to WebSocket
         await self.send(text_data=json.dumps({"message": message}))
 
-    async def add_user_to_room(self, room_name: str, user: User):
-        room = await self.add_user_to_room_model(
+    async def add_user_to_room(self, room_name: str, user: User) -> tuple[Room, bool]:
+        room, room_full = await self.add_user_to_room_model(
             room_name=room_name,
             user=user,
         )
@@ -126,7 +135,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 room_name,
                 self.channel_name,
             )
-        return room
+
+        return room, room_full
 
     @database_sync_to_async
     def add_user_to_room_model(self, room_name: str, user: User):
@@ -136,9 +146,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not room.is_full():
             room.occupants.add(user)
             room.save()
-            return room
+            return room, room.is_full()
 
-        return None
+        return None, False
+
+    @database_sync_to_async
+    def start_game(self, room: Room):
+        game = Game.create(room=room)
+        game.save()
+        return game
 
     @database_sync_to_async
     def get_room_info(self):
