@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_rq",
 ]
 
 MIDDLEWARE = [
@@ -81,6 +82,16 @@ CHANNEL_LAYERS = {
         },
     },
 }
+
+RQ_QUEUES = {
+    "default": {
+        "HOST": "127.0.0.1",
+        "PORT": 6379,
+        "DB": 1,
+        "DEFAULT_TIMEOUT": 360,
+    },
+}
+
 
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases

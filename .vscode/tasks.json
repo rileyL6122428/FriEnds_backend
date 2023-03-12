@@ -3,11 +3,26 @@
     "tasks": [
         {
             "label": "SEED DB",
-            "command": "poetry", // Could be any other shell command
+            "command": "poetry",
             "args": [
-                "run", "python", "manage.py", "seed"
+                "run", "python", "manage.py", "seed_db"
             ],
             "type": "shell"
+        },
+        {
+            "label": "SEED RQ",
+            "command": "poetry",
+            "args": [
+                "run", "python", "manage.py", "seed_rq"
+            ],
+            "type": "shell"
+        },
+        {
+            "label": "PREP DBS",
+            "dependsOn": [
+                "SEED DB",
+                "SEED RQ"
+            ]
         }
     ]
 }

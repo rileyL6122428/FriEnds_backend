@@ -1,46 +1,63 @@
-import asyncio
 import json
 import random
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from channels.auth import login
+from channels.auth import login, get_user
 from channels.db import database_sync_to_async
+from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
-from .models import Room, Game
+from .models import Room, Game, Client
 
 
-class ChatConsumer(AsyncWebsocketConsumer):
+class FriEndsConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.room_name = self.scope["url_route"]["kwargs"]["room_name"]
-        self.room_group_name = self.room_name
+        # self.room_name = self.scope["url_route"]["kwargs"]["room_name"]
+        # if username := self.scope['session']['username']:
+        #     user = await self.get_user(username)
+        # else:
 
-        user = await self.create_user()
-        await login(self.scope, user)
+        # user: User = self.scope["user"]
+        # user = await get_user(self.scope)
+        # if not user.is_authenticated:
+        #     user = await self.create_user()
+        #     await login(self.scope, user)
+        #     await database_sync_to_async(self.scope["session"].save)()
+        # self.scope["session"]["randomkey"] = random.randint(0, 100)
 
-        await self.channel_layer.group_add(
-            "ALL_USERS",
-            self.channel_name,
-        )
+        # await self.channel_layer.group_add(
+        #     "UNAUTHENTICATED_USERS",
+        #     self.channel_name,
+        #     expiry=10,
+        # )
+
+        # await self.channel_layer.group_add(
+        #     "ALL_USERS",
+        #     self.channel_name,
+        # )
+        await self.create_client()
 
         await self.accept()
 
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "message": "User created!",
-                    "username": self.username,
-                    "type": "user_created",
-                }
-            )
-        )
+        # await self.send(
+        #     text_data=json.dumps(
+        #         {
+        #             "message": "User created!",
+        #             "username": self.username,
+        #             "type": "user_created",
+        #         }
+        #     )
+        # )
+
+        # self.scope['session']['username'] = self.username
+        # await sync_to_async(self.scope["session"].save)()
 
     async def disconnect(self, close_code):
-        await self.delete_user()
-
-        await self.channel_layer.group_discard(
-            "ALL_USERS",
-            self.channel_name,
-        )
+        # await self.delete_user()
+        await self.delete_client()
+        # await self.channel_layer.group_discard(
+        #     "ALL_USERS",
+        #     self.channel_name,
+        # )
 
     # Receive message from WebSocket
     async def receive(self, text_data):
@@ -114,6 +131,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             }
                         )
                     )
+
+        await database_sync_to_async(self.scope["session"].save)()
+
+    @database_sync_to_async
+    def create_client(self):
+        return Client.objects.create(
+            channel_name=self.channel_name,
+        )
+
+    @database_sync_to_async
+    def delete_client(self):
+        Client.objects.filter(
+            channel_name=self.channel_name,
+        ).delete()
 
     async def group_send(self, event):
         await self.send(text_data=json.dumps(event["message"]))
