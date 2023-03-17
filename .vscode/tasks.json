@@ -2,6 +2,13 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "SEED DBS",
+            "dependsOn": [
+                "SEED DB",
+                "SEED RQ",
+            ],
+        },
+        {
             "label": "SEED DB",
             "command": "poetry",
             "args": [
@@ -15,14 +22,7 @@
             "args": [
                 "run", "python", "manage.py", "seed_rq"
             ],
-            "type": "shell"
-        },
-        {
-            "label": "PREP DBS",
-            "dependsOn": [
-                "SEED DB",
-                "SEED RQ"
-            ]
+            "type": "shell",
         }
     ]
 }

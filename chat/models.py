@@ -4,8 +4,10 @@ from django.contrib.auth.models import User
 
 class Client(models.Model):
     channel_name = models.CharField(max_length=255)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
     connection_time = models.DateTimeField(auto_now_add=True)
+    last_authed_message_time = models.DateTimeField(auto_now_add=False, null=True)
+    connected = models.BooleanField(default=True)
 
 
 # Create your models here.
