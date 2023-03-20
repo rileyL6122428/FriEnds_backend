@@ -31,7 +31,6 @@ class NaiveAuthHandler(MessageHandler):
     message_types: ClassVar[list[str]] = ["authenticate"]
 
     async def handle(self, message_data):
-        # DEBUG THIS NEXT
         username = message_data["username"]
         client_name = message_data["client_name"]
 
@@ -41,22 +40,23 @@ class NaiveAuthHandler(MessageHandler):
                 text_data=json.dumps(
                     {
                         "type": "authenticate error",
-                        "message": "User not found",
+                        "error": "User not found",
                     }
                 )
             )
-
-        user = await self.assign_client(user)
-        await login(self.scope, user)
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "authenticated",
-                    "username": user.username,
-                    "client_name": user.client.channel_name,
-                }
+        else:
+            user = await self.delete_current_client(user)
+            user = await self.assign_client(user)
+            await login(self.scope, user)
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "authenticated",
+                        "username": user.username,
+                        "client_name": user.client.channel_name,
+                    }
+                )
             )
-        )
 
     @database_sync_to_async
     def get_user(self, username: str, client_name: str):
@@ -70,9 +70,14 @@ class NaiveAuthHandler(MessageHandler):
         )
 
     @database_sync_to_async
+    def delete_current_client(self, user: User):
+        user.client.delete()
+        return user
+
+    @database_sync_to_async
     def assign_client(self, user: User):
         self.client.user = user
-        self.client.auth_time = timezone.now()
+        self.client.last_authed_message_time = timezone.now()
         self.client.save()
         return user
 
@@ -336,7 +341,7 @@ class FriEndsConsumer(AsyncWebsocketConsumer):
         client = Client.objects.get(
             channel_name=self.channel_name,
         )
-        client.disconnected = True
+        client.connected = True
         client.save()
 
     async def group_send(self, event):

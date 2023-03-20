@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 
 from django_rq import get_scheduler, get_queue
 from django.utils import timezone
-from chat.rq_jobs import delete_unuathenticated_clients
+from chat.rq_jobs import clean_up_clients
 
 
 class Command(BaseCommand):
@@ -16,6 +16,6 @@ class Command(BaseCommand):
 
         scheduler.schedule(
             scheduled_time=timezone.now(),
-            func=delete_unuathenticated_clients,
+            func=clean_up_clients,
             interval=60,
         )
