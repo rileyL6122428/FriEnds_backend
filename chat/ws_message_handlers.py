@@ -26,6 +26,23 @@ class MessageHandler:
 
 
 @dataclass
+class RoomInfoMixin(MessageHandler):
+    @database_sync_to_async
+    def get_room_info_message(self):
+        return {
+            "type": "room_info",
+            "rooms": [
+                {
+                    "name": room.name,
+                    "capacity": 2,
+                    "occupants": [user.username for user in room.occupants.all()],
+                }
+                for room in Room.objects.all().prefetch_related("occupants")
+            ],
+        }
+
+
+@dataclass
 class NaiveAuthHandler(MessageHandler):
     message_types: ClassVar[list[str]] = ["authenticate"]
 
@@ -158,36 +175,18 @@ class AuthedUserHandler(MessageHandler):
 
 
 @dataclass
-class RoomInfoHandler(MessageHandler):
+class RoomInfoHandler(RoomInfoMixin):
     message_types: ClassVar[list[str]] = ["room_info"]
 
     async def handle(self, message_data):
         if not self.scope["user"].is_authenticated:
             return
 
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "room_info",
-                    "rooms": await self.get_room_info(),
-                }
-            )
-        )
-
-    @database_sync_to_async
-    def get_room_info(self):
-        return [
-            {
-                "name": room.name,
-                "capacity": 2,
-                "occupants": [user.username for user in room.occupants.all()],
-            }
-            for room in Room.objects.all().prefetch_related("occupants")
-        ]
+        await self.send(text_data=json.dumps(await self.get_room_info_message()))
 
 
 @dataclass
-class JoinRoomHandler(MessageHandler):
+class JoinRoomHandler(RoomInfoMixin):
     message_types: ClassVar[list[str]] = ["join_room"]
 
     async def handle(self, message_data):
@@ -237,6 +236,13 @@ class JoinRoomHandler(MessageHandler):
                     }
                 )
             )
+            await self.consumer.channel_layer.group_send(
+                "ALL_USERS",
+                {
+                    "type": "forward_broadcast",
+                    "broadcast_message": await self.get_room_info_message(),
+                },
+            )
 
     @database_sync_to_async
     def already_in_room(self) -> bool:
@@ -259,7 +265,7 @@ class JoinRoomHandler(MessageHandler):
 
 
 @dataclass
-class LeaveRoomHandler(MessageHandler):
+class LeaveRoomHandler(RoomInfoMixin):
     message_types: ClassVar[list[str]] = ["leave_room"]
 
     async def handle(self, message_data):
@@ -287,6 +293,13 @@ class LeaveRoomHandler(MessageHandler):
                         "room_name": room.name,
                     }
                 )
+            )
+            await self.consumer.channel_layer.group_send(
+                "ALL_USERS",
+                {
+                    "type": "forward_broadcast",
+                    "broadcast_message": await self.get_room_info_message(),
+                },
             )
 
     @database_sync_to_async

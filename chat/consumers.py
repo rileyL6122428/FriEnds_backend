@@ -23,9 +23,14 @@ class FriEndsConsumer(AsyncWebsocketConsumer):
                 }
             )
         )
+        await self.channel_layer.group_add("ALL_USERS", self.channel_name)
 
     async def disconnect(self, close_code):
         await self.register_client_disconnect()
+        await self.channel_layer.group_discard("ALL_USERS", self.channel_name)
+
+    async def forward_broadcast(self, event):
+        await self.send(text_data=json.dumps(event["broadcast_message"]))
 
     async def receive(self, text_data):
         message = json.loads(text_data)["message"]
