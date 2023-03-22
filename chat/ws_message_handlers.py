@@ -191,7 +191,19 @@ class JoinRoomHandler(MessageHandler):
     message_types: ClassVar[list[str]] = ["join_room"]
 
     async def handle(self, message_data):
-        if not self.scope["user"].is_authenticated:
+        user: User = self.scope["user"]
+        if not user.is_authenticated:
+            return
+
+        if await self.already_in_room():
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "room error",
+                        "error": "User is already in a room",
+                    }
+                )
+            )
             return
 
         room_name = message_data["room_name"]
@@ -227,6 +239,11 @@ class JoinRoomHandler(MessageHandler):
             )
 
     @database_sync_to_async
+    def already_in_room(self) -> bool:
+        user: User = self.scope["user"]
+        return user.room_set.exists()
+
+    @database_sync_to_async
     def get_room(self, room_name: str):
         return Room.objects.filter(name=room_name).first()
 
@@ -239,3 +256,46 @@ class JoinRoomHandler(MessageHandler):
     @database_sync_to_async
     def is_full(self, room: Room):
         return room.is_full()
+
+
+@dataclass
+class LeaveRoomHandler(MessageHandler):
+    message_types: ClassVar[list[str]] = ["leave_room"]
+
+    async def handle(self, message_data):
+        user: User = self.scope["user"]
+        if not user.is_authenticated:
+            return
+
+        room: Room = await self.get_room()
+
+        if not room:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "leave room error",
+                        "error": "Room not found",
+                    }
+                )
+            )
+        else:
+            await self.remove_user_from(room)
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "left_room",
+                        "room_name": room.name,
+                    }
+                )
+            )
+
+    @database_sync_to_async
+    def get_room(self):
+        user: User = self.scope["user"]
+        return Room.objects.filter(occupants__in=[user]).first()
+
+    @database_sync_to_async
+    def remove_user_from(self, room: Room):
+        user: User = self.scope["user"]
+        room.occupants.remove(user)
+        room.save()
