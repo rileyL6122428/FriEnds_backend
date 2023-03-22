@@ -42,6 +42,7 @@ class FriEndsConsumer(AsyncWebsocketConsumer):
             ws_message_handlers.RoomInfoHandler,
             ws_message_handlers.JoinRoomHandler,
             ws_message_handlers.LeaveRoomHandler,
+            ws_message_handlers.GameInfoHandler,
             ws_message_handlers.AuthedUserHandler,
         ]
 
