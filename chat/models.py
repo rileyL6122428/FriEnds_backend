@@ -31,6 +31,9 @@ class Room(models.Model):
             user=user,
             game=self.game,
         )
+        if self.ready_to_start_game():
+            self.game.state = "playing"
+            self.game.save()
 
     def remove_occupant(self, user: User):
         self.occupants.remove(user)
@@ -51,9 +54,9 @@ class Player(models.Model):
         return self.user
 
 
-# class GameBoard(models.Model):
-#     width = models.IntegerField()
-#     height = models.IntegerField()
+class GameBoard(models.Model):
+    rows = models.IntegerField()
+    cols = models.IntegerField()
 
 
 # class GamePiece(models.Model):
@@ -80,11 +83,19 @@ class Game(models.Model):
     )
     # turn = models.IntegerField()
     # phase = models.IntegerField()
-    # board = models.ForeignKey(GameBoard, on_delete=models.CASCADE)
+    board = models.ForeignKey(GameBoard, on_delete=models.CASCADE)
 
     @classmethod
     def create(cls, room: Room):
-        new_game = cls(room=room, state="waiting")
+        board: GameBoard = GameBoard.objects.create(
+            rows=10,
+            cols=10,
+        )
+        new_game = cls(
+            room=room,
+            state="waiting",
+            board=board,
+        )
         new_game.save()
 
         for index, player in enumerate(room.occupants.all().order_by("id")):
@@ -96,6 +107,3 @@ class Game(models.Model):
             player.save()
 
         return new_game
-
-    def __str__(self):
-        return self.board

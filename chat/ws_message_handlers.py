@@ -42,17 +42,20 @@ class RoomInfoMixin(MessageHandler):
         }
 
     @database_sync_to_async
-    def get_room(self, room_name):
-        return (
-            Room.objects.filter(name=room_name)
-            .prefetch_related(
-                "game",
-                "game__player_set",
-                "game__player_set__user",
-                "occupants",
-            )
-            .first()
-        )
+    def get_room(self, room_name=None):
+        user: User = self.scope["user"]
+        if room_name is None:
+            room_filter = Room.objects.filter(occupants__in=[user])
+        else:
+            room_filter = Room.objects.filter(name=room_name)
+
+        return room_filter.prefetch_related(
+            "game",
+            "game__player_set",
+            "game__player_set__user",
+            "game__board",
+            "occupants",
+        ).first()
 
     async def send_room_not_found(self):
         await self.send(
@@ -77,21 +80,37 @@ class RoomInfoMixin(MessageHandler):
     async def send_game_info(self, room: Room):
         await self.send(
             text_data=json.dumps(
-                {
-                    "type": "game_info",
-                    "game": {
-                        "state": room.game.state,
-                        "players": [
-                            {
-                                "name": player.get_name(),
-                            }
-                            for player in room.game.player_set.all()
-                        ],
-                        "requiredPlayers": REQUIRED_PLAYER_COUNT,
-                    },
-                }
+                self.get_game_info_message(room.game),
             )
         )
+
+    async def broadcast_game_info(self, room: Room):
+        await self.consumer.channel_layer.group_send(
+            room.name,
+            {
+                "type": "forward_broadcast",
+                "broadcast_message": self.get_game_info_message(room.game),
+            },
+        )
+
+    def get_game_info_message(self, game: Game):
+        return {
+            "type": "game_info",
+            "game": {
+                "state": game.state,
+                "players": [
+                    {
+                        "name": player.get_name(),
+                    }
+                    for player in game.player_set.all()
+                ],
+                "requiredPlayers": REQUIRED_PLAYER_COUNT,
+                "grid": {
+                    "cols": game.board.cols,
+                    "rows": game.board.rows,
+                },
+            },
+        }
 
 
 @dataclass
@@ -323,40 +342,12 @@ class JoinRoomHandler(RoomInfoMixin):
                     "broadcast_message": await self.get_room_info_message(),
                 },
             )
-
-            game: Game = room.game
-            await self.consumer.channel_layer.group_send(
-                room.name,
-                {
-                    "type": "forward_broadcast",
-                    "broadcast_message": {
-                        "type": "game_info",
-                        "game": {
-                            "state": game.state,
-                            "players": [
-                                {
-                                    "name": player.get_name(),
-                                }
-                                for player in game.player_set.all()
-                            ],
-                            "requiredPlayers": REQUIRED_PLAYER_COUNT,
-                        },
-                    },
-                },
-            )
+            await self.broadcast_game_info(room)
 
     @database_sync_to_async
     def already_in_room(self) -> bool:
         user: User = self.scope["user"]
         return user.room_set.exists()
-
-    @database_sync_to_async
-    def get_room(self, room_name: str):
-        return (
-            Room.objects.filter(name=room_name)
-            .prefetch_related("game", "game__player_set", "game__player_set__user")
-            .first()
-        )
 
     @database_sync_to_async
     def add_user_to_room(self, room: Room):
@@ -409,11 +400,7 @@ class LeaveRoomHandler(RoomInfoMixin):
                     "broadcast_message": await self.get_room_info_message(),
                 },
             )
-
-    @database_sync_to_async
-    def get_room(self):
-        user: User = self.scope["user"]
-        return Room.objects.filter(occupants__in=[user]).first()
+            await self.broadcast_game_info(room)
 
     @database_sync_to_async
     def remove_user_from(self, room: Room):
