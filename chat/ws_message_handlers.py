@@ -54,6 +54,8 @@ class RoomInfoMixin(MessageHandler):
             "game__player_set",
             "game__player_set__user",
             "game__board",
+            "game__board__gamepiece_set",
+            "game__board__gamepiece_set__owner",
             "occupants",
         ).first()
 
@@ -102,13 +104,25 @@ class RoomInfoMixin(MessageHandler):
                     {
                         "name": player.get_name(),
                     }
-                    for player in game.player_set.all()
+                    for player in sorted(
+                        list(game.player_set.all()),
+                        key=lambda player: player.order,
+                    )
                 ],
                 "requiredPlayers": REQUIRED_PLAYER_COUNT,
                 "grid": {
                     "cols": game.board.cols,
                     "rows": game.board.rows,
                 },
+                "boardPieces": [
+                    {
+                        "name": piece.name,
+                        "row": piece.row,
+                        "col": piece.col,
+                        "player": {"name": piece.owner.name},
+                    }
+                    for piece in game.board.gamepiece_set.all()
+                ],
             },
         }
 
@@ -273,7 +287,6 @@ class GameInfoHandler(RoomInfoMixin):
             await self.send_user_not_in_room()
         else:
             await self.send_game_info(room)
-        # await self.send(text_data=json.dumps(await self.get_room_info_message()))
 
 
 @dataclass

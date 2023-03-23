@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from chat.models import Room, Client, Game
+from chat.models import Room, Game
 from django.contrib.auth.models import User
 
 

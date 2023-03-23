@@ -1,3 +1,4 @@
+import random
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -13,7 +14,6 @@ class Client(models.Model):
 REQUIRED_PLAYER_COUNT = 2
 
 
-# Create your models here.
 class Room(models.Model):
     name = models.CharField(max_length=255)
     occupants = models.ManyToManyField(User)
@@ -27,10 +27,13 @@ class Room(models.Model):
     def add_occupant(self, user: User):
         self.occupants.add(user)
         self.save()
-        Player.objects.create(
+        player = Player.objects.create(
             user=user,
+            name=user.username,
             game=self.game,
+            order=self.occupants.count() - 1,
         )
+        GamePiece.create_at_random_location(player, player.name)
         if self.ready_to_start_game():
             self.game.state = "playing"
             self.game.save()
@@ -43,31 +46,55 @@ class Room(models.Model):
 
 
 class Player(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    # order = models.IntegerField()
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
+    name = models.CharField(max_length=255)
+    order = models.IntegerField()
     game = models.ForeignKey("Game", on_delete=models.CASCADE)
 
     def get_name(self):
-        return self.user.username
-
-    def __str__(self):
-        return self.user
+        return self.name
 
 
 class GameBoard(models.Model):
     rows = models.IntegerField()
     cols = models.IntegerField()
 
+    def get_random_unoccupied_location(self) -> tuple[int, int]:
+        all_spaces = set()
+        for row in range(self.rows):
+            for col in range(self.cols):
+                all_spaces.add((col, row))
 
-# class GamePiece(models.Model):
-#     owner = models.ForeignKey(Player, on_delete=models.CASCADE)
-#     x_coord = models.IntegerField()
-#     y_coord = models.IntegerField()
-#     name = models.CharField(max_length=255)
-#     board = models.ForeignKey(GameBoard, on_delete=models.CASCADE)
+        occupied_spaces = set()
+        for piece in self.gamepiece_set.all():
+            occupied_spaces.add((piece.col, piece.row))
 
-#     def __str__(self):
-#         return self.piece
+        unoccupied_spaces = all_spaces - occupied_spaces
+        return random.choice(list(unoccupied_spaces))
+
+
+class GamePiece(models.Model):
+    owner = models.ForeignKey(Player, on_delete=models.CASCADE)
+    col = models.IntegerField()
+    row = models.IntegerField()
+    name = models.CharField(max_length=255)
+    board = models.ForeignKey(GameBoard, on_delete=models.CASCADE)
+
+    @classmethod
+    def create_at_random_location(cls, owner: Player, name: str):
+        board: GameBoard = owner.game.board
+        col, row = board.get_random_unoccupied_location()
+        return cls.create_at_location(owner, name, col, row)
+
+    @classmethod
+    def create_at_location(cls, owner: Player, name: str, col: int, row: int):
+        return cls.objects.create(
+            owner=owner,
+            col=col,
+            row=row,
+            name=name,
+            board=owner.game.board,
+        )
 
 
 class Game(models.Model):
@@ -98,12 +125,27 @@ class Game(models.Model):
         )
         new_game.save()
 
-        for index, player in enumerate(room.occupants.all().order_by("id")):
+        for user in room.occupants.all().order_by("id"):
             player = Player.objects.create(
-                user=player,
-                order=index,
+                user=user,
+                name=user.username,
                 game=new_game,
             )
             player.save()
+            GamePiece.create_at_random_location(
+                owner=player,
+                name=player.name,
+            )
+
+        enemy_player = Player.objects.create(
+            name="ENEMY",
+            game=new_game,
+            order=REQUIRED_PLAYER_COUNT,
+        )
+        enemy_player.save()
+        GamePiece.create_at_random_location(
+            owner=enemy_player,
+            name=enemy_player.name,
+        )
 
         return new_game
