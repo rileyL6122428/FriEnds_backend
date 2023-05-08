@@ -1,6 +1,7 @@
 import random
 from django.db import models
 from django.contrib.auth.models import User
+from typing import Tuple
 
 
 class Client(models.Model):
@@ -79,6 +80,8 @@ class GamePiece(models.Model):
     row = models.IntegerField()
     name = models.CharField(max_length=255)
     board = models.ForeignKey(GameBoard, on_delete=models.CASCADE)
+    class_name = models.CharField(max_length=255, default="brigand")
+    movement = models.IntegerField(default=4)
 
     @classmethod
     def create_at_random_location(cls, owner: Player, name: str):
@@ -95,6 +98,28 @@ class GamePiece(models.Model):
             name=name,
             board=owner.game.board,
         )
+
+    def get_moveable_spaces(self) -> list[Tuple[int, int]]:
+        board = self.board
+        spaces = set()
+        spaces.add((self.col, self.row))
+        for _i in range(self.movement + 1):
+            for space in spaces.copy():
+                spaces.update(self._get_adjacent_spaces(space))
+        spaces = set(filter(lambda space: space[0] >= 0, spaces))
+        spaces = set(filter(lambda space: space[1] >= 0, spaces))
+        spaces = set(filter(lambda space: space[0] < board.cols, spaces))
+        spaces = set(filter(lambda space: space[1] < board.rows, spaces))
+        return list(spaces)
+
+    def _get_adjacent_spaces(self, space: Tuple[int, int]) -> list[Tuple[int, int]]:
+        col, row = space
+        return [
+            (col + 1, row),
+            (col - 1, row),
+            (col, row + 1),
+            (col, row - 1),
+        ]
 
 
 class Game(models.Model):

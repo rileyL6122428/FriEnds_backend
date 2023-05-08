@@ -119,7 +119,10 @@ class RoomInfoMixin(MessageHandler):
                         "name": piece.name,
                         "row": piece.row,
                         "col": piece.col,
-                        "player": {"name": piece.owner.name},
+                        "player": {
+                            "name": piece.owner.name,
+                        },
+                        "moveableSpaces": piece.get_moveable_spaces(),
                     }
                     for piece in game.board.gamepiece_set.all()
                 ],
